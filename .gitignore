@@ -1,1 +1,3 @@
 producer/producer
+db/*
+.env

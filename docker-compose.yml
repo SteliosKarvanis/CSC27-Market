@@ -94,3 +94,18 @@ services:
       - controller-1
       - controller-2
       - controller-3
+
+  db:
+    image: mysql:latest
+    container_name: db
+    restart: always
+    shm_size: 128mb
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - ${MYSQL_PORT}:${MYSQL_PORT}
+    volumes:
+      - ./db:/var/lib/mysql
