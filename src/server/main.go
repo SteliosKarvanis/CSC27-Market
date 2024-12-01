@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	brokers = []string{"localhost:29092", "localhost:39092", "localhost:49092", "localhost:59092"}
-	addr    = "localhost:8080"
+	brokers      = []string{"localhost:29092", "localhost:39092", "localhost:49092", "localhost:59092"}
+	addr         = "localhost:8080"
 	requestTopic = "transactions"
 )
 
@@ -27,7 +27,7 @@ func main() {
 			log.Println("Failed to close server", err)
 		}
 	}()
-	
+
 	log.Printf("Listening for requests on %s...\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
