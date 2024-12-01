@@ -8,33 +8,32 @@ import (
 	"github.com/IBM/sarama"
 )
 
-type producerProvider struct {
+type ProducerProvider struct {
 	transactionIdGenerator int32
 	producersLock          sync.Mutex
 	producers              []sarama.AsyncProducer
 	brokers                []string
 }
 
-func newProducerProvider(brokers []string) *producerProvider {
-	provider := &producerProvider{}
+func newProducerProvider(brokers []string) *ProducerProvider {
+	provider := &ProducerProvider{}
 	provider.brokers = brokers
 	return provider
 }
 
-// TODO: create a config file
 func getSamaraConfig() *sarama.Config {
 	config := sarama.NewConfig()
-	config.Producer.Idempotent = true
-	config.Producer.Return.Errors = false
+	// config.Producer.Idempotent = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Partitioner = sarama.NewRoundRobinPartitioner
-	config.Producer.Transaction.Retry.Backoff = 10
-	config.Producer.Transaction.ID = "txn_producer"
-	config.Net.MaxOpenRequests = 1
+	config.Producer.Return.Successes = true
+	// Retry
+	config.Producer.Retry.Max = 10
+	config.Producer.Transaction.Retry.Backoff = 1000
 	return config
 }
 
-func (producerProvider *producerProvider) send(msg sarama.ProducerMessage) {
+func (producerProvider *ProducerProvider) send(topic string, data []byte) error {
 	producer := producerProvider.borrow()
 	defer producerProvider.release(producer)
 
@@ -42,15 +41,20 @@ func (producerProvider *producerProvider) send(msg sarama.ProducerMessage) {
 	err := producer.BeginTxn()
 	if err != nil {
 		log.Printf("unable to start txn %s\n", err)
-		return
+		return err
 	}
-
+	msg := &sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.ByteEncoder(data),
+	}
 	// Produce some records in transaction
-	producer.Input() <- &msg
+	producer.Input() <- msg
 
 	// commit transaction
 	err = producer.CommitTxn()
-	if err != nil {
+	if err == nil {
+		log.Printf("Producer: committed txn\n")
+	} else {
 		log.Printf("Producer: unable to commit txn %s\n", err)
 		for {
 			if producer.TxnStatus()&sarama.ProducerTxnFlagFatalError != 0 {
@@ -75,11 +79,11 @@ func (producerProvider *producerProvider) send(msg sarama.ProducerMessage) {
 				continue
 			}
 		}
-		return
 	}
+	return err
 }
 
-func (p *producerProvider) generateProducerInstance() sarama.AsyncProducer {
+func (p *ProducerProvider) generateProducerInstance() sarama.AsyncProducer {
 	config := getSamaraConfig()
 	suffix := p.transactionIdGenerator
 	if config.Producer.Transaction.ID != "" {
@@ -93,7 +97,7 @@ func (p *producerProvider) generateProducerInstance() sarama.AsyncProducer {
 	return producer
 }
 
-func (p *producerProvider) borrow() (producer sarama.AsyncProducer) {
+func (p *ProducerProvider) borrow() (producer sarama.AsyncProducer) {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 
@@ -112,7 +116,7 @@ func (p *producerProvider) borrow() (producer sarama.AsyncProducer) {
 	return
 }
 
-func (p *producerProvider) release(producer sarama.AsyncProducer) {
+func (p *ProducerProvider) release(producer sarama.AsyncProducer) {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 
@@ -125,12 +129,18 @@ func (p *producerProvider) release(producer sarama.AsyncProducer) {
 	p.producers = append(p.producers, producer)
 }
 
-func (p *producerProvider) clear() {
+func (p *ProducerProvider) clear() error {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 
-	for _, producer := range p.producers {
-		producer.Close()
+	for idx, producer := range p.producers {
+		err := producer.Close()
+		log.Printf("Producer %d closed\n", err)
+		if err != nil {
+			log.Printf("Failed to close producer %d: %v", idx, err)
+			return err
+		}
 	}
 	p.producers = p.producers[:0]
+	return nil
 }
