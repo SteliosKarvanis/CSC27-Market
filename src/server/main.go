@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	brokers      = []string{"localhost:29092", "localhost:39092", "localhost:49092", "localhost:59092"}
-	addr         = "localhost:8080"
+	brokers      = []string{"broker-1:19092", "broker-2:19092", "broker-3:19092", "broker-4:19092"}
+	addr         = ":8080"
 	requestTopic = "transactions"
 )
 

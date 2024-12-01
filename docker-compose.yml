@@ -81,3 +81,13 @@ services:
       - ${MYSQL_PORT}:${MYSQL_PORT}
     volumes:
       - ./db:/var/lib/mysql
+
+  server:
+    container_name: server
+    build: src/server
+    ports:
+      - "8080:8080"
+
+  consumer:
+    container_name: consumer
+    build: src/consumer

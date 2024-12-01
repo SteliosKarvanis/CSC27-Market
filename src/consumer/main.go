@@ -1,52 +1,24 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/IBM/sarama"
 )
 
 func main() {
-	// Kafka broker address
-	brokers := []string{"localhost:29092"}
-	topic := "transactions"
+	group := "fgada"
+	// brokers := []string{"localhost:29092"}
+	brokers := []string{"broker-1:19092", "broker-2:19092", "broker-3:19092", "broker-4:19092"}
+	topics := []string{"transactions"}
 
-	// Create a new consumer
-	consumer, err := sarama.NewConsumer(brokers, nil)
-	if err != nil {
-		log.Fatalf("Error creating consumer: %v", err)
+	config := sarama.NewConfig()
+	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	gc := GroupConsumer{
+		brokers:        brokers,
+		consumerConfig: config,
+		group:          group,
+		topics:         topics,
 	}
-	defer func() {
-		if err := consumer.Close(); err != nil {
-			log.Fatalf("Error closing consumer: %v", err)
-		}
-	}()
-
-	// Get the list of partitions for the topic
-	partitions, err := consumer.Partitions(topic)
-	if err != nil {
-		log.Fatalf("Error getting partitions: %v", err)
-	}
-
-	// Consume messages from each partition
-	for _, partition := range partitions {
-		go func(partition int32) {
-			// Create a partition consumer
-			pc, err := consumer.ConsumePartition(topic, partition, sarama.OffsetOldest)
-			if err != nil {
-				log.Fatalf("Error consuming partition %d: %v", partition, err)
-			}
-			defer pc.Close()
-
-			// Read messages
-			for message := range pc.Messages() {
-				fmt.Printf("Partition: %d, Offset: %d, Key: %s, Value: %s\n",
-					message.Partition, message.Offset, string(message.Key), string(message.Value))
-			}
-		}(partition)
-	}
-
-	// Wait indefinitely
-	select {}
+	gc.startConsuming()
 }
