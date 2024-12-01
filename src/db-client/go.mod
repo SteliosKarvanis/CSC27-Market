@@ -1,4 +1,4 @@
-module db-client
+module db_client
 
 go 1.22.6
 
