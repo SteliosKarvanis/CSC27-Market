@@ -18,12 +18,12 @@ func main() {
 	sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
 
 	server := &Server{
-		syncProducer: newSyncProducer(brokers),
+		provider: newProducerProvider(brokers),
 	}
 	server.registerEndpoints()
 
 	defer func() {
-		if err := server.Close(); err != nil {
+		if err := server.provider.clear(); err != nil {
 			log.Println("Failed to close server", err)
 		}
 	}()
