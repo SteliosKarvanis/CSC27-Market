@@ -2,17 +2,11 @@ package main
 
 import (
 	"csc27/utils/consumer"
-	"csc27/utils/dtypes"
-	"database/sql"
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/IBM/sarama"
 	"github.com/joho/godotenv"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -32,29 +26,6 @@ func main() {
 	port := os.Getenv("MYSQL_PORT")
 	dsn := fmt.Sprintf("%s:%s@tcp(:%s)/kafka_stock", user, password, port)
 	println(dsn)
-	sqlDB, _ := sql.Open("mysql", dsn)
-	gormDB, _ := gorm.Open(mysql.New(mysql.Config{
-		Conn: sqlDB,
-	}), &gorm.Config{})
-
-	consumptionFun := func(message *sarama.ConsumerMessage) error {
-		var transaction dtypes.Transaction
-
-		json.Unmarshal(message.Value, &transaction)
-		fmt.Printf("Saving on DB TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
-			transaction.TransactionID, transaction.ProductID, transaction.Price, transaction.Quantity)
-
-		tx := gormDB.Create(&transaction)
-		if tx.Error != nil {
-			log.Printf("Error saving on DB: %v", tx.Error)
-			return tx.Error
-		} else {
-			log.Printf("Message saved on DB")
-		}
-		tx.Commit()
-		return nil
-	}
-
-	gc := &consumer.GroupConsumer{ConsumeFun: consumptionFun, ConsumerConfig: config, Group: group, Topics: topics}
-	gc.StartConsuming(brokers)
+	gc := consumer.InitializeGroupConsumer(config, group, topics, brokers, dsn)
+	gc.StartConsuming()
 }

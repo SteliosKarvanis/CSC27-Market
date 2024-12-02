@@ -2,31 +2,46 @@ package consumer
 
 import (
 	"context"
+	"csc27/utils/dtypes"
+	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/IBM/sarama"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
-
-	"github.com/IBM/sarama"
 )
 
 type GroupConsumer struct {
-	ConsumeFun	 func(*sarama.ConsumerMessage) error
-	ConsumerConfig *sarama.Config
-	Group          string
-	Topics         []string
+	Client   sarama.ConsumerGroup
+	Topics   []string
+	Messages chan *sarama.ConsumerMessage
+	Db       *gorm.DB
 }
 
-func (gc *GroupConsumer) StartConsuming(brokers []string) {
+func InitializeGroupConsumer(config *sarama.Config, group string, topics []string, brokers []string, dsn string) *GroupConsumer {
+	db := InitializeDb(dsn)
+	client := InitializeClient(brokers, group, config)
+	return &GroupConsumer{
+		Client:   client,
+		Topics:   topics,
+		Messages: make(chan *sarama.ConsumerMessage),
+		Db:       db,
+	}
+}
+
+func (gc *GroupConsumer) StartConsuming() {
 	consumer := Consumer{
-		ready: make(chan bool),
-		ConsumeFun: gc.ConsumeFun,
+		ready:    make(chan bool),
+		messages: gc.Messages,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client := InitializeClient(brokers, gc.Group, gc.ConsumerConfig)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -36,7 +51,7 @@ func (gc *GroupConsumer) StartConsuming(brokers []string) {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, gc.Topics, &consumer); err != nil {
+			if err := gc.Client.Consume(ctx, gc.Topics, &consumer); err != nil {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 					return
 				}
@@ -49,7 +64,7 @@ func (gc *GroupConsumer) StartConsuming(brokers []string) {
 			consumer.ready = make(chan bool)
 		}
 	}()
-
+	go gc.ConsumeMessages()
 	<-consumer.ready // Await till the consumer has been set up
 	log.Println("Sarama consumer up and running!...")
 
@@ -72,7 +87,57 @@ func (gc *GroupConsumer) StartConsuming(brokers []string) {
 	}
 	cancel()
 	wg.Wait()
-	if err := client.Close(); err != nil {
+	if err := gc.Client.Close(); err != nil {
 		log.Panicf("Error closing client: %v", err)
 	}
+}
+
+func (gc *GroupConsumer) ConsumeMessages() {
+	for {
+		select {
+		case message := <-gc.Messages:
+			log.Printf("Consuming message: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
+			err := gc.Save(message)
+			if err != nil {
+				log.Printf("Error consuming message: %v", err)
+			}
+		}
+	}
+}
+
+func (gc *GroupConsumer) Save(message *sarama.ConsumerMessage) error {
+	var transaction dtypes.Transaction
+
+	json.Unmarshal(message.Value, &transaction)
+	fmt.Printf("Saving on DB TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
+		transaction.TransactionID, transaction.ProductID, transaction.Price, transaction.Quantity)
+	result := gc.Db.Create(&transaction)
+	if result.Error != nil {
+		log.Printf("Error saving on DB: %v", result.Error)
+		return result.Error
+	} else {
+		log.Printf("Message saved on DB")
+	}
+
+	var tscs []dtypes.Transaction
+	gc.Db.Find(&tscs)
+	for _, tsc := range tscs {
+		fmt.Printf("Fetch: TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
+			tsc.TransactionID, tsc.ProductID, tsc.Price, tsc.Quantity)
+	}
+	return nil
+}
+
+func InitializeDb(dsn string) *gorm.DB {
+	sqlDB, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Printf("Error connecting to DB: %v", err)
+	}
+	gormDB, err := gorm.Open(mysql.New(mysql.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{})
+	if err != nil {
+		log.Printf("Error initializing DB: %v", err)
+	}
+	return gormDB
 }

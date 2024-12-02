@@ -8,8 +8,8 @@ import (
 
 // Consumer represents a Sarama consumer group consumer
 type Consumer struct {
-	ready chan bool
-	ConsumeFun func(*sarama.ConsumerMessage) error
+	ready    chan bool
+	messages chan *sarama.ConsumerMessage
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
@@ -39,9 +39,9 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 				log.Printf("message channel was closed")
 				return nil
 			}
-			consumer.ConsumeFun(message)
 			log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
 			session.MarkMessage(message, "")
+			consumer.messages <- message
 		case <-session.Context().Done():
 			return nil
 		}
