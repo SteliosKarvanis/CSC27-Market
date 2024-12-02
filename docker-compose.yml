@@ -95,3 +95,5 @@ services:
     build:
       dockerfile: dbClient/Dockerfile
       context: src/
+    env_file:
+      - .env

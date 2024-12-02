@@ -3,15 +3,17 @@ package consumer
 import (
 	"context"
 	"errors"
-	"github.com/IBM/sarama"
 	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/IBM/sarama"
 )
 
 type GroupConsumer struct {
+	ConsumeFun	 func(*sarama.ConsumerMessage) error
 	ConsumerConfig *sarama.Config
 	Group          string
 	Topics         []string
@@ -20,6 +22,7 @@ type GroupConsumer struct {
 func (gc *GroupConsumer) StartConsuming(brokers []string) {
 	consumer := Consumer{
 		ready: make(chan bool),
+		ConsumeFun: gc.ConsumeFun,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

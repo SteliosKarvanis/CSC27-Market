@@ -28,7 +28,7 @@ func (s *Server) ReceiveRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var txn dtypes.Request
+	var txn dtypes.Transaction
 	if err := json.NewDecoder(r.Body).Decode(&txn); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
