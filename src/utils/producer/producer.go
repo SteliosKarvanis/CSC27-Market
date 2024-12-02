@@ -1,4 +1,4 @@
-package main
+package producer
 
 import (
 	"fmt"
@@ -15,13 +15,13 @@ type ProducerProvider struct {
 	brokers                []string
 }
 
-func newProducerProvider(brokers []string) *ProducerProvider {
+func NewProducerProvider(brokers []string) *ProducerProvider {
 	provider := &ProducerProvider{}
 	provider.brokers = brokers
 	return provider
 }
 
-func getSamaraConfig() *sarama.Config {
+func GetSamaraConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Producer.Idempotent = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
@@ -35,9 +35,9 @@ func getSamaraConfig() *sarama.Config {
 	return config
 }
 
-func (producerProvider *ProducerProvider) send(topic string, data []byte) error {
-	producer := producerProvider.borrow()
-	defer producerProvider.release(producer)
+func (producerProvider *ProducerProvider) Send(topic string, data []byte) error {
+	producer := producerProvider.Borrow()
+	defer producerProvider.Release(producer)
 
 	// Start kafka transaction
 	err := producer.BeginTxn()
@@ -87,8 +87,8 @@ func (producerProvider *ProducerProvider) send(topic string, data []byte) error 
 	return err
 }
 
-func (p *ProducerProvider) generateProducerInstance() sarama.SyncProducer {
-	config := getSamaraConfig()
+func (p *ProducerProvider) GenerateProducerInstance() sarama.SyncProducer {
+	config := GetSamaraConfig()
 	suffix := p.transactionIdGenerator
 	if config.Producer.Transaction.ID != "" {
 		p.transactionIdGenerator++
@@ -101,12 +101,12 @@ func (p *ProducerProvider) generateProducerInstance() sarama.SyncProducer {
 	return producer
 }
 
-func (p *ProducerProvider) borrow() sarama.SyncProducer {
+func (p *ProducerProvider) Borrow() sarama.SyncProducer {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 
 	if len(p.producers) == 0 {
-		return p.generateProducerInstance()
+		return p.GenerateProducerInstance()
 	} else {
 		index := len(p.producers) - 1
 		producer := p.producers[index]
@@ -115,7 +115,7 @@ func (p *ProducerProvider) borrow() sarama.SyncProducer {
 	}
 }
 
-func (p *ProducerProvider) release(producer sarama.SyncProducer) error {
+func (p *ProducerProvider) Release(producer sarama.SyncProducer) error {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 
@@ -132,7 +132,7 @@ func (p *ProducerProvider) release(producer sarama.SyncProducer) error {
 	return nil
 }
 
-func (p *ProducerProvider) clear() error {
+func (p *ProducerProvider) Clear() error {
 	p.producersLock.Lock()
 	defer p.producersLock.Unlock()
 

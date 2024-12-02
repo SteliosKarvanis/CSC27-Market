@@ -1,4 +1,4 @@
-package main
+package dtypes
 
 type Request struct {
 	ID     string  `json:"id"`

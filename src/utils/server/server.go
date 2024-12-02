@@ -1,6 +1,8 @@
-package main
+package server
 
 import (
+	"csc27/utils/dtypes"
+	"csc27/utils/producer"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,25 +10,25 @@ import (
 )
 
 type Server struct {
-	provider    *ProducerProvider
+	Provider *producer.ProducerProvider
 }
 
 ////////////////////////////////////////
 ///////////// Endpoints ////////////////
 ////////////////////////////////////////
 
-func (s *Server) registerEndpoints() {
-	http.HandleFunc("/transactions", s.receiveRequest)
+func (s *Server) RegisterEndpoints() {
+	http.HandleFunc("/transactions", s.ReceiveRequest)
 }
 
-func (s *Server) receiveRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ReceiveRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Received request from %s\n", r.RemoteAddr)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var txn Request
+	var txn dtypes.Request
 	if err := json.NewDecoder(r.Body).Decode(&txn); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
@@ -37,7 +39,7 @@ func (s *Server) receiveRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to serialize transaction", http.StatusInternalServerError)
 		return
 	}
-	s.provider.send(requestTopic, data)
+	s.Provider.Send("transactions", data)
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, "Transaction sent successfully")

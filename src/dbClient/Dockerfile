@@ -2,13 +2,11 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+COPY . .
 
 RUN go mod download
 
-COPY . .
-
-RUN go build -o main .
+RUN go build -o main dbClient/main.go
 
 FROM alpine:latest
 

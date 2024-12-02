@@ -1,6 +1,7 @@
 package main
 
 import (
+	"csc27/utils/consumer"
 	"github.com/IBM/sarama"
 )
 
@@ -14,11 +15,6 @@ func main() {
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-	gc := GroupConsumer{
-		brokers:        brokers,
-		consumerConfig: config,
-		group:          group,
-		topics:         topics,
-	}
-	gc.startConsuming()
+	gc := &consumer.GroupConsumer{ConsumerConfig: config, Group: group, Topics: topics}
+	gc.StartConsuming(brokers)
 }

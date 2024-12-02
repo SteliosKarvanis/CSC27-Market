@@ -84,10 +84,14 @@ services:
 
   server:
     container_name: server
-    build: src/server
+    build:
+      dockerfile: server/Dockerfile
+      context: src/
     ports:
       - "8080:8080"
 
   consumer:
     container_name: consumer
-    build: src/consumer
+    build:
+      dockerfile: dbClient/Dockerfile
+      context: src/

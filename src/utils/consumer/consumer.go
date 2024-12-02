@@ -1,4 +1,4 @@
-package main
+package consumer
 
 import (
 	"github.com/IBM/sarama"
@@ -46,7 +46,7 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	}
 }
 
-func initializeClient(brokers []string, group string, config *sarama.Config) sarama.ConsumerGroup {
+func InitializeClient(brokers []string, group string, config *sarama.Config) sarama.ConsumerGroup {
 	timeout := 5
 	for {
 		client, err := sarama.NewConsumerGroup(brokers, group, config)

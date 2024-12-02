@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/IBM/sarama"
+	"csc27/utils/producer"
+	"csc27/utils/server"
 )
 
 var (
@@ -17,13 +19,13 @@ var (
 func main() {
 	sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
 
-	server := &Server{
-		provider: newProducerProvider(brokers),
+	server := &server.Server{
+		Provider: producer.NewProducerProvider(brokers),
 	}
-	server.registerEndpoints()
+	server.RegisterEndpoints()
 
 	defer func() {
-		if err := server.provider.clear(); err != nil {
+		if err := server.Provider.Clear(); err != nil {
 			log.Println("Failed to close server", err)
 		}
 	}()

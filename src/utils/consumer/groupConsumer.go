@@ -1,4 +1,4 @@
-package main
+package consumer
 
 import (
 	"context"
@@ -12,19 +12,18 @@ import (
 )
 
 type GroupConsumer struct {
-	brokers        []string //TODO: Remove it
-	consumerConfig *sarama.Config
-	group          string
-	topics         []string
+	ConsumerConfig *sarama.Config
+	Group          string
+	Topics         []string
 }
 
-func (gc *GroupConsumer) startConsuming() {
+func (gc *GroupConsumer) StartConsuming(brokers []string) {
 	consumer := Consumer{
 		ready: make(chan bool),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	client := initializeClient(gc.brokers, gc.group, gc.consumerConfig)
+	client := InitializeClient(brokers, gc.Group, gc.ConsumerConfig)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -34,7 +33,7 @@ func (gc *GroupConsumer) startConsuming() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, gc.topics, &consumer); err != nil {
+			if err := client.Consume(ctx, gc.Topics, &consumer); err != nil {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 					return
 				}

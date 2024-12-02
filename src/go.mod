@@ -1,10 +1,15 @@
-module market-server
+module csc27
 
 go 1.22.6
 
-require github.com/IBM/sarama v1.43.3
+require (
+	github.com/IBM/sarama v1.43.3
+	github.com/go-sql-driver/mysql v1.8.1
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
