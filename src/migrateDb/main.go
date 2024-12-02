@@ -8,11 +8,12 @@ import (
 
 	"csc27/utils/dtypes"
 
+	"reflect"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"reflect"
 )
 
 func main() {
@@ -23,7 +24,8 @@ func main() {
 	user := os.Getenv("MYSQL_USER")
 	password := os.Getenv("MYSQL_PASSWORD")
 	port := os.Getenv("MYSQL_PORT")
-	dsn := fmt.Sprintf("%s:%s@tcp(localhost:%s)/kafka_stock", user, password, port)
+	db := os.Getenv("MYSQL_DATABASE")
+	dsn := fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", user, password, port, db)
 	sqlDB, _ := sql.Open("mysql", dsn)
 	gormDB, _ := gorm.Open(mysql.New(mysql.Config{
 		Conn: sqlDB,
