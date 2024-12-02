@@ -22,17 +22,24 @@ func main() {
 	user := os.Getenv("MYSQL_USER")
 	password := os.Getenv("MYSQL_PASSWORD")
 	port := os.Getenv("MYSQL_PORT")
-	dsn := fmt.Sprintf("%s:%s@tcp(localhost:%s)/kafka_stock", user, password, port)
+	db := os.Getenv("MYSQL_DATABASE")
+	dsn := fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", user, password, port, db)
 	sqlDB, _ := sql.Open("mysql", dsn)
 	gormDB, _ := gorm.Open(mysql.New(mysql.Config{
 		Conn: sqlDB,
 	}), &gorm.Config{})
-	
+
 	// Custom Query
 	var tscs []dtypes.Transaction
 	gormDB.Find(&tscs)
 	for _, tsc := range tscs {
 		fmt.Printf("TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
 			tsc.TransactionID, tsc.ProductID, tsc.Price, tsc.Quantity)
+	}
+	var prods []dtypes.Product
+	gormDB.Find(&prods)
+	for _, prod := range prods {
+		fmt.Printf("ProductID: %s, Price: %.2f, Quantity: %d\n",
+			prod.ProductID, prod.Price, prod.Quantity)
 	}
 }
