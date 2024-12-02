@@ -90,10 +90,10 @@ services:
     ports:
       - "8080:8080"
 
-  consumer:
-    container_name: consumer
-    build:
-      dockerfile: dbClient/Dockerfile
-      context: src/
-    env_file:
-      - .env
+  # consumer:
+  #   container_name: consumer
+  #   build:
+  #     dockerfile: dbClient/Dockerfile
+  #     context: src/
+  #   env_file:
+  #     - .env

@@ -6,17 +6,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/IBM/sarama"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 	"log"
 	"os"
+
+	"github.com/IBM/sarama"
+	"github.com/joho/godotenv"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 func main() {
 	group := "transactions-group2"
-	// brokers := []string{"localhost:29092"}
-	brokers := []string{"broker-1:19092", "broker-2:19092", "broker-3:19092", "broker-4:19092"}
+	brokers := []string{"localhost:29092", "localhost:39092", "localhost:49092", "localhost:59092"}
+	// brokers := []string{"broker-1:19092", "broker-2:19092", "broker-3:19092", "broker-4:19092"}
 	topics := []string{"transactions"}
 
 	config := sarama.NewConfig()
@@ -24,6 +26,7 @@ func main() {
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
 	//TODO: Fix this
+	godotenv.Load("../.env")
 	user := os.Getenv("MYSQL_USER")
 	password := os.Getenv("MYSQL_PASSWORD")
 	port := os.Getenv("MYSQL_PORT")
