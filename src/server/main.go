@@ -17,7 +17,7 @@ func main() {
 	sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
 
 	server := server.InitializeServer()
-	server.RegisterEndpoints()
+	server.StartServer()
 
 	defer func() {
 		if err := server.Provider.Clear(); err != nil {

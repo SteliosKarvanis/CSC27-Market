@@ -14,8 +14,9 @@ import (
 )
 
 type Server struct {
-	Provider *producer.ProducerProvider
-	Consumer *consumer.Consumer
+	Provider  *producer.ProducerProvider
+	Consumer  *consumer.Consumer
+	Responses map[string]chan *sarama.ConsumerMessage
 }
 
 func InitializeServer() *Server {
@@ -27,8 +28,9 @@ func InitializeServer() *Server {
 	consumer := consumer.InitializeConsumer(config, constants.TransactionResponseConsumerGroup, []string{constants.TransactionResponseTopic}, constants.BROKERS_CONTAINER)
 
 	server := &Server{
-		Provider: provider,
-		Consumer: consumer,
+		Provider:  provider,
+		Consumer:  consumer,
+		Responses: make(map[string]chan *sarama.ConsumerMessage),
 	}
 
 	return server
@@ -40,6 +42,22 @@ func InitializeServer() *Server {
 
 func (s *Server) RegisterEndpoints() {
 	http.HandleFunc("/transactions", s.ReceiveRequest)
+}
+
+func (s *Server) StartServer() {
+	s.RegisterEndpoints()
+	go s.Consumer.StartConsuming()
+	go func() {
+		for {
+			select {
+			case msg := <-s.Consumer.Messages:
+				log.Printf("Received Response %s\n", msg.Value)
+				var response dtypes.TransactionResponse
+				json.Unmarshal(msg.Value, &response)
+				s.Responses[response.TransactionID] <- msg
+			}
+		}
+	}()
 }
 
 func (s *Server) ReceiveRequest(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +84,18 @@ func (s *Server) ReceiveRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send Request
-	s.Provider.Send(constants.TransactionRequestTopic, data)
+	s.Responses[txn.TransactionID] = make(chan *sarama.ConsumerMessage)
+	producer.Send(s.Provider, constants.TransactionRequestTopic, data)
+	log.Printf("Sent transaction request %s\n", txn.TransactionID)
 
 	// Receive Response
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w)
+
+	log.Printf("Waiting %s\n", txn.TransactionID)
+	msg := <-s.Responses[txn.TransactionID]
+	// Handle response
+	log.Printf("Received response %s\n", txn.TransactionID)
+	response := dtypes.TransactionResponse{}
+	json.Unmarshal(msg.Value, &response)
+	fmt.Fprintln(w, response.TransactionStatus)
 }

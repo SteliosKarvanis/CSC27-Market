@@ -49,7 +49,7 @@ func (dbClient DbClient) Start() {
 			log.Printf("Received message")
 			err := dbClient.ExecuteTransaction(message)
 			if err != nil {
-				log.Fatalf("Error executing transaction: %v", err)
+				log.Printf("Error executing transaction: %v", err)
 			}
 		case <-sigterm:
 			log.Println("terminating: via signal")
@@ -71,26 +71,42 @@ func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) err
 	err := dbClient.Db.Where("product_id = ?", transaction.ProductID).First(&product).Error
 	if err != nil {
 		log.Fatalf("Error fetching product on db: %s", transaction.ProductID)
+		return err
+	}
+	transaction.Price = product.Price
+	// Check if there is enough quantity
+	newQuantity := product.Quantity - transaction.Quantity
+	if newQuantity <= 0 {
+		log.Printf("Transaction Denied. Product not available: %s", transaction.TransactionID)
+		transaction.TransactionStatus = constants.TransactionStatusFailed
 	} else {
-		transaction.Price = product.Price
-		// Check if there is enough quantity
-		newQuantity := product.Quantity - transaction.Quantity
-		if newQuantity <= 0 {
-			log.Printf("Invalid Transaction: %s", transaction.TransactionID)
-			transaction.TransactionStatus = constants.TransactionStatusFailed
-		} else {
-			transaction.TransactionStatus = constants.TransactionStatusSuccess
-			log.Printf("Updating existing ProductID: %s, Quantity:%d\n", product.ProductID, newQuantity)
-			dbClient.Db.Model(&product).Updates(dtypes.Product{Quantity: newQuantity})
-		}
-		// Save transaction on DB
-		result := dbClient.Db.Create(&transaction)
-		if result.Error != nil {
-			log.Printf("Error saving on DB: %v", result.Error)
-			return result.Error
-		} else {
-			log.Printf("Message saved on DB")
-		}
+		transaction.TransactionStatus = constants.TransactionStatusSuccess
+		log.Printf("Transaction Successfull. Updating existing ProductID: %s, Quantity:%d\n", product.ProductID, newQuantity)
+		dbClient.Db.Model(&product).Updates(dtypes.Product{Quantity: newQuantity})
+	}
+	// Save transaction on DB
+	result := dbClient.Db.Create(&transaction)
+	if result.Error != nil {
+		log.Printf("Error saving on DB: %v", result.Error)
+		return result.Error
+	} else {
+		log.Printf("Message saved on DB")
+	}
+	// Produce response
+	response := dtypes.TransactionResponse{
+		TransactionID:     transaction.TransactionID,
+		TransactionStatus: transaction.TransactionStatus,
+	}
+	data, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling response: %v", err)
+		return err
+	}
+	log.Printf("Sending response to topic: %s", constants.TransactionResponseTopic)
+	err = producer.Send(dbClient.Producer, constants.TransactionResponseTopic, data)
+	if err != nil {
+		log.Printf("Error sending message: %v", err)
+		return err
 	}
 	return nil
 }
