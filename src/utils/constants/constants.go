@@ -21,4 +21,6 @@ var (
 const (
 	TransactionRequestConsumerGroup string = "transactions-request-group"
 	TransactionResponseConsumerGroup string = "transaction-response-group"
+	ConsultRequestConsumerGroup string = "consult-request-group"
+	ConsultResponseConsumerGroup string = "consult-response-group"
 )

@@ -6,17 +6,17 @@ type TransactionRequest struct {
 	Quantity   int    `json:"quantity"`
 }
 
-type ConsultAvailabilityRequest struct {
-	ProductID string `json:"product_id"`
-}
-
-type ConsultAvailabilityResponse struct {
-	ProductID string  `json:"product_id"`
-	Quantity  int     `json:"quantity"`
-	Price     float64 `json:"price"`
-}
-
 type TransactionResponse struct {
 	TransactionID     string `json:"transaction_id"`
 	TransactionStatus string `json:"transaction_status"`
+}
+
+type ConsultProductRequest struct {
+	ProductID string `json:"product_id"`
+}
+
+type ConsultProductResponse struct {
+	ProductID string  `json:"product_id"`
+	Quantity  int     `json:"quantity"`
+	Price     float64 `json:"price"`
 }
