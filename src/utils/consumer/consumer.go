@@ -1,54 +1,87 @@
 package consumer
 
 import (
-	"github.com/IBM/sarama"
+	"context"
+	"errors"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
+
+	"github.com/IBM/sarama"
 )
 
-// Consumer represents a Sarama consumer group consumer
 type Consumer struct {
-	ready    chan bool
-	messages chan *sarama.ConsumerMessage
+	Client   sarama.ConsumerGroup
+	Topics   []string
+	Messages chan *sarama.ConsumerMessage
 }
 
-// Setup is run at the beginning of a new session, before ConsumeClaim
-func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
-	// Mark the consumer as ready
-	close(consumer.ready)
-	return nil
-}
-
-// Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
-func (consumer *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-// ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
-// Once the Messages() channel is closed, the Handler must finish its processing
-// loop and exit.
-func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	// NOTE:
-	// Do not move the code below to a goroutine.
-	// The `ConsumeClaim` itself is called within a goroutine, see:
-	// https://github.com/IBM/sarama/blob/main/consumer_group.go#L27-L29
-	for {
-		select {
-		case message, ok := <-claim.Messages():
-			if !ok {
-				log.Printf("message channel was closed")
-				return nil
-			}
-			log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
-			session.MarkMessage(message, "")
-			consumer.messages <- message
-		case <-session.Context().Done():
-			return nil
-		}
+func InitializeConsumer(config *sarama.Config, group string, topics []string, brokers []string, dsn string) *Consumer {
+	client := initializeClient(brokers, group, config)
+	return &Consumer{
+		Client:   client,
+		Topics:   topics,
+		Messages: make(chan *sarama.ConsumerMessage),
 	}
 }
 
-func InitializeClient(brokers []string, group string, config *sarama.Config) sarama.ConsumerGroup {
+func (consumer *Consumer) StartConsuming() {
+	cg := ConsumerGroup{
+		ready:    make(chan bool),
+		messages: consumer.Messages,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			// `Consume` should be called inside an infinite loop, when a
+			// server-side rebalance happens, the consumer session will need to be
+			// recreated to get the new claims
+			if err := consumer.Client.Consume(ctx, consumer.Topics, &cg); err != nil {
+				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+					return
+				}
+				log.Panicf("Error from consumer: %v", err)
+			}
+			// check if context was cancelled, signaling that the consumer should stop
+			if ctx.Err() != nil {
+				return
+			}
+			cg.ready = make(chan bool)
+		}
+	}()
+	<-cg.ready // Await till the consumer has been set up
+	log.Println("Sarama consumer up and running!...")
+
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
+
+	keepRunning := true
+	for keepRunning {
+		select {
+		case <-ctx.Done():
+			log.Println("terminating: context cancelled")
+			keepRunning = false
+		case <-sigterm:
+			log.Println("terminating: via signal")
+			keepRunning = false
+		}
+	}
+	cancel()
+	wg.Wait()
+	if err := consumer.Client.Close(); err != nil {
+		log.Panicf("Error closing client: %v", err)
+	}
+}
+
+func initializeClient(brokers []string, group string, config *sarama.Config) sarama.ConsumerGroup {
 	timeout := 5
 	for {
 		client, err := sarama.NewConsumerGroup(brokers, group, config)
