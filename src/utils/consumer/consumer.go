@@ -19,7 +19,7 @@ type Consumer struct {
 	Messages chan *sarama.ConsumerMessage
 }
 
-func InitializeConsumer(config *sarama.Config, group string, topics []string, brokers []string, dsn string) *Consumer {
+func InitializeConsumer(config *sarama.Config, group string, topics []string, brokers []string) *Consumer {
 	client := initializeClient(brokers, group, config)
 	return &Consumer{
 		Client:   client,

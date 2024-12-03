@@ -3,19 +3,23 @@ package dbClientUtils
 import (
 	"csc27/utils/constants"
 	"csc27/utils/consumer"
-	"csc27/utils/dbUtils"
 	"csc27/utils/dtypes"
+	"csc27/utils/producer"
 	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/IBM/sarama"
 	"gorm.io/gorm"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 type DbClient struct {
 	Db                        *gorm.DB
 	TransationRequestConsumer *consumer.Consumer
+	Producer                  *producer.ProducerProvider
 }
 
 func InitializeDbClient(config *sarama.Config, dsn string, onHost bool) DbClient {
@@ -25,23 +29,31 @@ func InitializeDbClient(config *sarama.Config, dsn string, onHost bool) DbClient
 	} else {
 		brokers = constants.BROKERS_CONTAINER
 	}
-	db := dbUtils.InitializeDb(dsn)
+	db := InitializeDb(dsn)
 	return DbClient{
-		TransationRequestConsumer: consumer.InitializeConsumer(config, constants.TransactionsConsumerGroup, []string{constants.TransactionRequestTopic}, brokers, dsn),
 		Db:                        db,
+		TransationRequestConsumer: consumer.InitializeConsumer(config, constants.TransactionRequestConsumerGroup, []string{constants.TransactionRequestTopic}, brokers),
+		Producer:                  producer.NewProducerProvider(brokers),
 	}
 }
 
 func (dbClient DbClient) Start() {
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
+
 	go dbClient.TransationRequestConsumer.StartConsuming()
 
 	for {
 		select {
 		case message := <-dbClient.TransationRequestConsumer.Messages:
+			log.Printf("Received message")
 			err := dbClient.ExecuteTransaction(message)
 			if err != nil {
 				log.Fatalf("Error executing transaction: %v", err)
 			}
+		case <-sigterm:
+			log.Println("terminating: via signal")
+			return
 		}
 	}
 }
@@ -54,7 +66,7 @@ func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) err
 	fmt.Printf("Saving on DB TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
 		transaction.TransactionID, transaction.ProductID, transaction.Price, transaction.Quantity)
 
-	// Check if product exists
+	// Get Product
 	var product dtypes.Product
 	err := dbClient.Db.Where("product_id = ?", transaction.ProductID).First(&product).Error
 	if err != nil {
@@ -63,7 +75,7 @@ func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) err
 		transaction.Price = product.Price
 		// Check if there is enough quantity
 		newQuantity := product.Quantity - transaction.Quantity
-		if newQuantity < 0 {
+		if newQuantity <= 0 {
 			log.Printf("Invalid Transaction: %s", transaction.TransactionID)
 			transaction.TransactionStatus = constants.TransactionStatusFailed
 		} else {

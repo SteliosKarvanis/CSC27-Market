@@ -36,4 +36,5 @@ func main() {
 		Quantity: 100000,
 	}
 	_ = gormDB.Create(product)
+	// gormDB.Model(&product).Updates(dtypes.Product{Quantity: product.Quantity})
 }

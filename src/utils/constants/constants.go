@@ -19,5 +19,6 @@ var (
 )
 
 const (
-	TransactionsConsumerGroup string = "transactions-group"
+	TransactionRequestConsumerGroup string = "transactions-request-group"
+	TransactionResponseConsumerGroup string = "transaction-response-group"
 )

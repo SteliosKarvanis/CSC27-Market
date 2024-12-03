@@ -1,27 +1,22 @@
 package main
 
 import (
+	"csc27/utils/server"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/IBM/sarama"
-	"csc27/utils/producer"
-	"csc27/utils/server"
 )
 
 var (
-	brokers      = []string{"broker-1:19092", "broker-2:19092", "broker-3:19092", "broker-4:19092"}
-	addr         = ":8080"
-	requestTopic = "transactions"
+	addr = ":8080"
 )
 
 func main() {
 	sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
 
-	server := &server.Server{
-		Provider: producer.NewProducerProvider(brokers),
-	}
+	server := server.InitializeServer()
 	server.RegisterEndpoints()
 
 	defer func() {

@@ -36,7 +36,9 @@ func GetSamaraConfig() *sarama.Config {
 }
 
 func (producerProvider *ProducerProvider) Send(topic string, data []byte) error {
+	log.Printf("Provider: sending message to topic %s\n", topic)
 	producer := producerProvider.Borrow()
+	log.Printf("Producer selected")
 	defer producerProvider.Release(producer)
 
 	// Start kafka transaction
@@ -88,6 +90,7 @@ func (producerProvider *ProducerProvider) Send(topic string, data []byte) error 
 }
 
 func (p *ProducerProvider) GenerateProducerInstance() sarama.SyncProducer {
+	log.Printf("Generating new producer instance")
 	config := GetSamaraConfig()
 	suffix := p.transactionIdGenerator
 	if config.Producer.Transaction.ID != "" {
@@ -96,8 +99,10 @@ func (p *ProducerProvider) GenerateProducerInstance() sarama.SyncProducer {
 	}
 	producer, err := sarama.NewSyncProducer(p.brokers, config)
 	if err != nil {
+		log.Printf("Failed to create producer: %v\n", err)
 		panic(err)
 	}
+	log.Printf("Generating new producer instance")
 	return producer
 }
 

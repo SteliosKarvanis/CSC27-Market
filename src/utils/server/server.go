@@ -2,16 +2,36 @@ package server
 
 import (
 	"csc27/utils/constants"
+	"csc27/utils/consumer"
 	"csc27/utils/dtypes"
 	"csc27/utils/producer"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/IBM/sarama"
 )
 
 type Server struct {
 	Provider *producer.ProducerProvider
+	Consumer *consumer.Consumer
+}
+
+func InitializeServer() *Server {
+	config := sarama.NewConfig()
+	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	provider := producer.NewProducerProvider(constants.BROKERS_CONTAINER)
+	consumer := consumer.InitializeConsumer(config, constants.TransactionResponseConsumerGroup, []string{constants.TransactionResponseTopic}, constants.BROKERS_CONTAINER)
+
+	server := &Server{
+		Provider: provider,
+		Consumer: consumer,
+	}
+
+	return server
 }
 
 ////////////////////////////////////////

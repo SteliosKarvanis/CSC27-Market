@@ -1,4 +1,4 @@
-package dbUtils
+package dbClientUtils
 
 import (
 	"database/sql"
