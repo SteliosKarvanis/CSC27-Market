@@ -48,7 +48,7 @@ func (consumer *Consumer) StartConsuming() {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 					return
 				}
-				log.Panicf("Error from consumer: %v", err)
+				log.Panicf("Consumer: error in initialization. %v", err)
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
@@ -77,7 +77,7 @@ func (consumer *Consumer) StartConsuming() {
 	cancel()
 	wg.Wait()
 	if err := consumer.Client.Close(); err != nil {
-		log.Panicf("Error closing client: %v", err)
+		log.Panicf("Consumer: Error closing client: %v", err)
 	}
 }
 
@@ -86,7 +86,7 @@ func initializeClient(brokers []string, group string, config *sarama.Config) sar
 	for {
 		client, err := sarama.NewConsumerGroup(brokers, group, config)
 		if err != nil {
-			log.Printf("Error creating consumer group client. Retrying in %d seconds", timeout)
+			log.Printf("Consumer: Error creating group client. Retrying in %d seconds", timeout)
 			time.Sleep(time.Duration(timeout) * time.Second)
 		} else {
 			return client

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/IBM/sarama"
 )
@@ -29,6 +30,7 @@ func NewProducerProvider(brokers []string) *ProducerProvider {
 		}
 		producer, err := sarama.NewAsyncProducer(brokers, config)
 		if err != nil {
+			log.Printf("Producer: failed to create instance. %v\n", err)
 			return nil
 		}
 		return producer
@@ -39,10 +41,11 @@ func NewProducerProvider(brokers []string) *ProducerProvider {
 func GetSamaraConfig() *sarama.Config {
 	config := sarama.NewConfig()
 	config.Producer.Idempotent = true
-	config.Producer.Return.Errors = false
+	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Partitioner = sarama.NewRoundRobinPartitioner
-	config.Producer.Transaction.Retry.Backoff = 10
+	config.Producer.Retry.Max = 5
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
 	config.Producer.Transaction.ID = "txn_producer"
 	config.Net.MaxOpenRequests = 1
 	// Retry
@@ -50,16 +53,16 @@ func GetSamaraConfig() *sarama.Config {
 }
 
 func Send(producerProvider *ProducerProvider, topic string, data []byte) error {
-	log.Printf("Provider: sending message to topic %s\n", topic)
+	log.Printf("Producer: Sending message to topic %s\n", topic)
 	producer := producerProvider.Borrow()
-	log.Printf("Producer selected")
-	defer producerProvider.Release(producer)
+	log.Printf("Producer: Selected sender")
+	// defer producerProvider.Release(producer)
 
 	// Start kafka transaction
 	err := producer.BeginTxn()
 	if err != nil {
+		log.Printf("Producer: Unable to start txn %s\n", err)
 		producer.AbortTxn()
-		log.Printf("unable to start txn %s\n", err)
 		return err
 	}
 	msg := &sarama.ProducerMessage{
@@ -70,25 +73,27 @@ func Send(producerProvider *ProducerProvider, topic string, data []byte) error {
 	producer.Input() <- msg
 	// commit transaction
 	err = producer.CommitTxn()
-	if err == nil {
+	if err != nil {
+		log.Printf("Producer: failed to commit txn. %s\n", err)
 		producer.AbortTxn()
-		log.Printf("Producer: committed txn\n")
+		return err
 	}
+	log.Printf("Producer: committed txn\n")
 	return err
 }
 
 func (p *ProducerProvider) GenerateProducerInstance() sarama.AsyncProducer {
-	log.Printf("Generating new producer instance")
+	log.Printf("Producer: Generating new instance")
 	config := GetSamaraConfig()
 	suffix := p.transactionIdGenerator
 	p.transactionIdGenerator++
 	config.Producer.Transaction.ID = config.Producer.Transaction.ID + "-" + fmt.Sprint(suffix)
 	producer, err := sarama.NewAsyncProducer(p.brokers, config)
 	if err != nil {
-		log.Printf("Failed to create producer: %v\n", err)
+		log.Printf("Producer: failed to create instance. %v\n", err)
 		panic(err)
 	}
-	log.Printf("Generated new producer instance")
+	log.Printf("Producer: New Instance created")
 	return producer
 }
 
@@ -102,6 +107,8 @@ func (p *ProducerProvider) Borrow() (producer sarama.AsyncProducer) {
 			if producer != nil {
 				return
 			}
+			log.Printf("Producer: Failed to create producer. Retrying in 2 second\n")
+			time.Sleep(2 * time.Second)
 		}
 	}
 	index := len(p.producers) - 1
@@ -119,7 +126,7 @@ func (p *ProducerProvider) Release(producer sarama.AsyncProducer) error {
 		// Try to close it
 		err := producer.Close()
 		if err != nil {
-			log.Printf("Failed to close producer: %v\n", err)
+			log.Printf("Producer: Failed to close. %v\n", err)
 		}
 		return err
 	}

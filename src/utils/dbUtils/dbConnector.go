@@ -1,4 +1,4 @@
-package dbClientUtils
+package dbUtils
 
 import (
 	"csc27/utils/constants"
@@ -6,23 +6,25 @@ import (
 	"csc27/utils/dtypes"
 	"csc27/utils/producer"
 	"encoding/json"
-	"fmt"
 	"log"
+	"sync"
 
-	"github.com/IBM/sarama"
-	"gorm.io/gorm"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/IBM/sarama"
+	"gorm.io/gorm"
 )
 
-type DbClient struct {
+type DbConnector struct {
 	Db                        *gorm.DB
 	TransationRequestConsumer *consumer.Consumer
 	Producer                  *producer.ProducerProvider
+	ProducerMux               *sync.Mutex
 }
 
-func InitializeDbClient(config *sarama.Config, dsn string, onHost bool) DbClient {
+func InitializeDbClient(config *sarama.Config, dsn string, onHost bool) DbConnector {
 	var brokers []string
 	if onHost {
 		brokers = constants.BROKERS_HOST
@@ -30,24 +32,25 @@ func InitializeDbClient(config *sarama.Config, dsn string, onHost bool) DbClient
 		brokers = constants.BROKERS_CONTAINER
 	}
 	db := InitializeDb(dsn)
-	return DbClient{
+	return DbConnector{
 		Db:                        db,
 		TransationRequestConsumer: consumer.InitializeConsumer(config, constants.TransactionRequestConsumerGroup, []string{constants.TransactionRequestTopic}, brokers),
 		Producer:                  producer.NewProducerProvider(brokers),
+		ProducerMux:               &sync.Mutex{},
 	}
 }
 
-func (dbClient DbClient) Start() {
+func (dbConnector DbConnector) Start() {
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
-	go dbClient.TransationRequestConsumer.StartConsuming()
+	go dbConnector.TransationRequestConsumer.StartConsuming()
 
 	for {
 		select {
-		case message := <-dbClient.TransationRequestConsumer.Messages:
+		case message := <-dbConnector.TransationRequestConsumer.Messages:
 			log.Printf("Received message")
-			err := dbClient.ExecuteTransaction(message)
+			err := dbConnector.ExecuteTransaction(message)
 			if err != nil {
 				log.Printf("Error executing transaction: %v", err)
 			}
@@ -58,17 +61,15 @@ func (dbClient DbClient) Start() {
 	}
 }
 
-func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) error {
+func (dbConnector DbConnector) ExecuteTransaction(message *sarama.ConsumerMessage) error {
 	// Decode message
 	var transaction dtypes.Transaction
 	json.Unmarshal(message.Value, &transaction)
 
-	fmt.Printf("Saving on DB TransactionID: %s, ProductID: %s, Price: %.2f, Quantity: %d\n",
-		transaction.TransactionID, transaction.ProductID, transaction.Price, transaction.Quantity)
-
-	// Get Product
+	dbConnector.ProducerMux.Lock()
+	// Consult Product
 	var product dtypes.Product
-	err := dbClient.Db.Where("product_id = ?", transaction.ProductID).First(&product).Error
+	err := dbConnector.Db.Where("product_id = ?", transaction.ProductID).First(&product).Error
 	if err != nil {
 		log.Fatalf("Error fetching product on db: %s", transaction.ProductID)
 		return err
@@ -76,16 +77,17 @@ func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) err
 	transaction.Price = product.Price
 	// Check if there is enough quantity
 	newQuantity := product.Quantity - transaction.Quantity
-	if newQuantity <= 0 {
+	if newQuantity < 0 {
 		log.Printf("Transaction Denied. Product not available: %s", transaction.TransactionID)
 		transaction.TransactionStatus = constants.TransactionStatusFailed
 	} else {
 		transaction.TransactionStatus = constants.TransactionStatusSuccess
-		log.Printf("Transaction Successfull. Updating existing ProductID: %s, Quantity:%d\n", product.ProductID, newQuantity)
-		dbClient.Db.Model(&product).Updates(dtypes.Product{Quantity: newQuantity})
+		log.Printf("Transaction Successfull. Removing %d Updating existing ProductID: %s, Quantity:%d\n", transaction.Quantity, product.ProductID, newQuantity)
+		dbConnector.Db.Model(&product).Updates(dtypes.Product{Quantity: newQuantity})
 	}
+	dbConnector.ProducerMux.Unlock()
 	// Save transaction on DB
-	result := dbClient.Db.Create(&transaction)
+	result := dbConnector.Db.Create(&transaction)
 	if result.Error != nil {
 		log.Printf("Error saving on DB: %v", result.Error)
 		return result.Error
@@ -103,7 +105,7 @@ func (dbClient DbClient) ExecuteTransaction(message *sarama.ConsumerMessage) err
 		return err
 	}
 	log.Printf("Sending response to topic: %s", constants.TransactionResponseTopic)
-	err = producer.Send(dbClient.Producer, constants.TransactionResponseTopic, data)
+	err = producer.Send(dbConnector.Producer, constants.TransactionResponseTopic, data)
 	if err != nil {
 		log.Printf("Error sending message: %v", err)
 		return err

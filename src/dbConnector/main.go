@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"csc27/utils/dbClientUtils"
+	"csc27/utils/dbUtils"
 	"github.com/IBM/sarama"
 	"github.com/joho/godotenv"
 )
@@ -15,7 +15,6 @@ const (
 
 func main() {
 	config := sarama.NewConfig()
-	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.Offsets.Retry.Max = 10
 
@@ -30,6 +29,6 @@ func main() {
 	dsn := fmt.Sprintf("%s:%s@tcp(:%s)/%s", user, password, port, db)
 	println(dsn)
 
-	dbClient := dbClientUtils.InitializeDbClient(config, dsn, onHost)
+	dbClient := dbUtils.InitializeDbClient(config, dsn, onHost)
 	dbClient.Start()
 }

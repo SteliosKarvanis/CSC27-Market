@@ -51,9 +51,9 @@ func (s *Server) StartServer() {
 		for {
 			select {
 			case msg := <-s.Consumer.Messages:
-				log.Printf("Received Response %s\n", msg.Value)
 				var response dtypes.TransactionResponse
 				json.Unmarshal(msg.Value, &response)
+				log.Printf("Received Response %s\n", response.TransactionID)
 				s.Responses[response.TransactionID] <- msg
 			}
 		}
@@ -62,7 +62,7 @@ func (s *Server) StartServer() {
 
 func (s *Server) ReceiveRequest(w http.ResponseWriter, r *http.Request) {
 	// Check HTTP Type
-	log.Printf("Received request from %s\n", r.RemoteAddr)
+	log.Printf("Endpoint received %s\n", r.RemoteAddr)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
 		return

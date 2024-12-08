@@ -35,10 +35,10 @@ func (cg *ConsumerGroup) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 		select {
 		case message, ok := <-claim.Messages():
 			if !ok {
-				log.Printf("message channel was closed")
+				log.Printf("Consumer: Message channel was closed")
 				return nil
 			}
-			log.Printf("Message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
+			log.Printf("Consumer: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
 			session.MarkMessage(message, "")
 			cg.messages <- message
 		case <-session.Context().Done():
