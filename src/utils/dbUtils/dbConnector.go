@@ -7,7 +7,6 @@ import (
 	"csc27/utils/producer"
 	"encoding/json"
 	"log"
-	"sync"
 
 	"os"
 	"os/signal"
@@ -21,7 +20,6 @@ type DbConnector struct {
 	Db                        *gorm.DB
 	TransationRequestConsumer *consumer.Consumer
 	Producer                  *producer.ProducerProvider
-	ProducerMux               *sync.Mutex
 }
 
 func InitializeDbClient(config *sarama.Config, dsn string) DbConnector {
@@ -32,7 +30,6 @@ func InitializeDbClient(config *sarama.Config, dsn string) DbConnector {
 		Db:                        db,
 		TransationRequestConsumer: consumer.InitializeConsumer(config, constants.TransactionRequestConsumerGroup, []string{constants.TransactionRequestTopic}, brokers),
 		Producer:                  producer.NewProducerProvider(brokers),
-		ProducerMux:               &sync.Mutex{},
 	}
 }
 
@@ -62,7 +59,6 @@ func (dbConnector DbConnector) ExecuteTransaction(message *sarama.ConsumerMessag
 	var transaction dtypes.Transaction
 	json.Unmarshal(message.Value, &transaction)
 
-	dbConnector.ProducerMux.Lock()
 	// Consult Product
 	var product dtypes.Product
 	err := dbConnector.Db.Where("product_id = ?", transaction.ProductID).First(&product).Error
@@ -81,7 +77,6 @@ func (dbConnector DbConnector) ExecuteTransaction(message *sarama.ConsumerMessag
 		log.Printf("Transaction Successfull. Removing %d Updating existing ProductID: %s, Quantity:%d\n", transaction.Quantity, product.ProductID, newQuantity)
 		dbConnector.Db.Model(&product).Updates(dtypes.Product{Quantity: newQuantity})
 	}
-	dbConnector.ProducerMux.Unlock()
 	// Save transaction on DB
 	result := dbConnector.Db.Create(&transaction)
 	if result.Error != nil {
