@@ -2,15 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"csc27/utils/dbUtils"
-	"github.com/IBM/sarama"
-	"github.com/joho/godotenv"
-)
 
-const (
-	onHost = true
+	"github.com/IBM/sarama"
 )
 
 func main() {
@@ -19,16 +16,13 @@ func main() {
 	config.Consumer.Offsets.Retry.Max = 10
 
 	//TODO: Fix this
-	if onHost {
-		godotenv.Load("../.env")
-	}
 	user := os.Getenv("MYSQL_USER")
 	password := os.Getenv("MYSQL_PASSWORD")
 	port := os.Getenv("MYSQL_PORT")
 	db := os.Getenv("MYSQL_DATABASE")
-	dsn := fmt.Sprintf("%s:%s@tcp(:%s)/%s", user, password, port, db)
-	println(dsn)
+	dsn := fmt.Sprintf("%s:%s@tcp(db:%s)/%s", user, password, port, db)
+	log.Printf("Connector: connected on db at %s", dsn)
 
-	dbClient := dbUtils.InitializeDbClient(config, dsn, onHost)
+	dbClient := dbUtils.InitializeDbClient(config, dsn)
 	dbClient.Start()
 }

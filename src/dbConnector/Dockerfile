@@ -4,12 +4,12 @@ WORKDIR /app
 
 COPY go.mod go.mod
 COPY go.sum go.sum
-COPY dbClient/ dbClient/
+COPY dbConnector/ dbConnector/
 COPY utils/ utils/
 
 RUN go mod download
 
-RUN go build -o main dbClient/main.go
+RUN go build -o main dbConnector/main.go
 
 FROM alpine:latest
 

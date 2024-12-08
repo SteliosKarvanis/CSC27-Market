@@ -90,10 +90,12 @@ services:
     ports:
       - "8080:8080"
 
-  # consumer:
-  #   container_name: consumer
-  #   build:
-  #     dockerfile: dbClient/Dockerfile
-  #     context: src/
-  #   env_file:
-  #     - .env
+  db_connector:
+    container_name: dbConnector
+    build:
+      dockerfile: dbConnector/Dockerfile
+      context: src/
+    env_file:
+      - .env
+    depends_on:
+      - db
