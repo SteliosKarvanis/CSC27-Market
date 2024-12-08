@@ -69,7 +69,7 @@ services:
 
   db:
     image: mysql:latest
-    container_name: db
+    container_name: ${MYSQL_DATABASE_SERVICE}
     restart: always
     shm_size: 128mb
     environment:

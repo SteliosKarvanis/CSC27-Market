@@ -27,15 +27,6 @@ type DbConnector struct {
 func InitializeDbClient(config *sarama.Config, dsn string) DbConnector {
 	brokers := constants.BROKERS_CONTAINER
 	db := InitializeDb(dsn)
-	db.AutoMigrate(dtypes.Tables...)
-	// Add Initial Records
-	product:=dtypes.Product{
-		ProductID: "PROD-001",
-		Price: 100.0,
-		Quantity: 100000,
-	}
-	_ = db.Create(product)
-	db.Model(&product).Updates(dtypes.Product{Quantity: product.Quantity})
 
 	return DbConnector{
 		Db:                        db,
